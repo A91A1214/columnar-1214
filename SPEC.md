@@ -1,30 +1,54 @@
 # Custom Columnar File Format Specification
 
-## Byte Order
-- Little Endian
+## Overview
+This document defines a binary columnar file format optimized for analytical queries with selective column reads.
 
-## Header Layout
-| Field | Size |
-|------|------|
-| Magic Number | 4 bytes ("COLF") |
-| Number of Columns | 4 bytes |
-| Number of Rows | 4 bytes |
+## File Structure
 
+### 1. Magic Number (4 bytes)
+- ASCII string: `COL1`
+- Used to identify the file format
+
+### 2. Version (4 bytes)
+- Little-endian 32-bit integer
+- Current version: 1
+
+### 3. Number of Rows (8 bytes)
+- Little-endian 64-bit integer
+- Total rows in the dataset
+
+### 4. Number of Columns (4 bytes)
+- Little-endian 32-bit integer
+
+### 5. Column Metadata (variable size, repeated for each column)
 For each column:
-- Column name length (4 bytes)
-- Column name (UTF-8)
-- Data type (1 byte)
-- Column offset (8 bytes)
-- Compressed size (8 bytes)
-- Uncompressed size (8 bytes)
+- **Column Name Length** (4 bytes): little-endian 32-bit integer
+- **Column Name** (variable): UTF-8 encoded string
+- **Column Type** (1 byte):
+  - `0x01` = int32
+  - `0x02` = float64
+  - `0x03` = string (UTF-8)
+- **Data Offset** (8 bytes): little-endian 64-bit integer, byte position where column data starts
+- **Uncompressed Size** (8 bytes): size of raw column data before compression
+- **Compressed Size** (8 bytes): size after zlib compression
 
-## Data Types
-- 1 = int32
-- 2 = float64
-- 3 = string (UTF-8)
+### 6. Column Data Blocks (variable size)
+Each column's data stored as a separate compressed block:
 
-## Column Storage
-- Each column stored as a contiguous compressed block
-- Strings stored as:
-  - Offsets array
-  - Concatenated UTF-8 bytes
+#### For int32 columns:
+- Array of 32-bit little-endian integers, then compressed with zlib
+
+#### For float64 columns:
+- Array of 64-bit little-endian floats, then compressed with zlib
+
+#### For string columns:
+- **Offsets array** (4 bytes per string): cumulative byte positions
+- **String data**: concatenated UTF-8 bytes
+- Both compressed together with zlib
+
+## Endianness
+All multi-byte integers and floats use **little-endian** byte order.
+
+## Compression
+- Algorithm: zlib (DEFLATE)
+- Applied to each column block independently
